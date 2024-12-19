@@ -1,0 +1,6 @@
+file_ops:
+  base_dir: "./data"
+
+vector_ops:
+  index_path: "./faiss_index"
+  model_name: "sentence-transformers/all-mpnet-base-v2"
