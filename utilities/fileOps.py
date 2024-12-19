@@ -1,7 +1,7 @@
-import os
-from fastapi import UploadFile
-from typing import List
-from vectorizationOps import VectorizationOps
+import os  
+from fastapi import UploadFile  
+from utilities.vectorizationOps import VectorizationOps 
+
 
 class FileOps:
     def __init__(self, base_dir: str, vector_ops: VectorizationOps):

@@ -10,4 +10,4 @@ This repository implements an end-to-end RAG pipeline with file uploads, FAISS v
 ## Setup
 1. Clone the repository:
    ```bash
-   git clone https://github.com/krishna/Downloads/chatbot_qa/.git/
+   git clone https://github.com/satyamev0209/Chatbot_Open_Source 

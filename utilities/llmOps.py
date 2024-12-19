@@ -1,6 +1,5 @@
-from typing import List
-import requests
-import prompts
+from langchain_community.llms import Ollama
+from utilities import prompts
 
 
 def generate_answer(context: str, question: str):

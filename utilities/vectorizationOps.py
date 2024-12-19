@@ -1,9 +1,10 @@
 import os
 import json
-from pypdf_loader import PyPDFLoader
-import faiss
 from typing import List
-from sentence_transformers import SentenceTransformer
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.vectorstores import FAISS
 
 
 class VectorizationOps:
@@ -28,9 +29,9 @@ class VectorizationOps:
 
     def load_index(self):
         if os.path.exists(self.index_path):
-            self.index = faiss.read_index(self.index_path)
+            self.index = FAISS.read_index(self.index_path)
         else:
-            self.index = faiss.IndexFlatL2(768)  # Assuming 768-dimensional embeddings
+            self.index = FAISS.IndexFlatL2(768)  # Assuming 768-dimensional embeddings
 
     def save_index(self, vectorstore):
         # faiss.write_index(self.index, self.index_path)
@@ -51,9 +52,9 @@ class VectorizationOps:
         # Load and split PDF into chunks
         loader = PyPDFLoader(file_path)
         documents = loader.load()        #Splitting the data into chunk
-        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=30, separator="\n")
+        text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=30, separator="\n")
         docs = text_splitter.split_documents(documents=documents)
-
+        chunks = [doc.page_content for doc in docs]
         # # Generate embeddings
         # embeddings = self.model.encode(chunks)
         #loading the data and correspond embedding into the FAISS
@@ -86,7 +87,7 @@ class VectorizationOps:
         ]
 
         # Rebuild the FAISS index
-        self.index = faiss.IndexFlatL2(768)
+        self.index = FAISS.IndexFlatL2(768)
         self.index.add(remaining_embeddings)
         self.save_index()
 

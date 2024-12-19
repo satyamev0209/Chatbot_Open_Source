@@ -1,11 +1,10 @@
-# import libraries
+# Import libraries
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
 from pydantic import BaseModel
-from fastapi import FastAPI, UploadFile, HTTPException
-from fileOps import FileOps
-from vectorizationOps import VectorizationOps
-import llmOps
+from utilities.fileOps import FileOps
+from utilities.vectorizationOps import VectorizationOps
+import utilities.llmOps 
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -55,7 +54,7 @@ def read_root():
 def ask_question(question: Question):
     try:
         context = vector_ops.search(question)
-        answer = llmOps.generate_answer(context, question)
+        answer = utilities.llmOps.generate_answer(context, question)
 
         return Answer(answer=answer)
 
