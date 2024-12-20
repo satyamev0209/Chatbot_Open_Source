@@ -3,8 +3,8 @@ import json
 from typing import List
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
 
 
 class VectorizationOps:
@@ -18,20 +18,28 @@ class VectorizationOps:
         self.load_index()
 
     def embedding_setup(self):
-        #loading the embedding model from huggingface
+        # Loading the embedding model from Hugging Face
         embedding_model_name = self.model_name
-        model_kwargs = {"device": "cuda"}
+        model_kwargs = {"device": "cpu"}  # Change to "cpu" to use CPU
         embeddings = HuggingFaceEmbeddings(
-        model_name=embedding_model_name,
-        model_kwargs=model_kwargs
+            model_name=embedding_model_name,
+            model_kwargs=model_kwargs
         )
         return embeddings
 
     def load_index(self):
         if os.path.exists(self.index_path):
-            self.index = FAISS.read_index(self.index_path)
+            self.index = FAISS.load_local(
+                self.index_path, 
+                self.embeddings,
+                allow_dangerous_deserialization=True
+            )
         else:
-            self.index = FAISS.IndexFlatL2(768)  # Assuming 768-dimensional embeddings
+            # Create an empty FAISS index
+            self.index = FAISS.from_texts(
+                texts=[""], 
+                embedding=self.embeddings
+            )
 
     def save_index(self, vectorstore):
         # faiss.write_index(self.index, self.index_path)
@@ -51,25 +59,22 @@ class VectorizationOps:
     def process_file(self, file_path: str):
         # Load and split PDF into chunks
         loader = PyPDFLoader(file_path)
-        documents = loader.load()        #Splitting the data into chunk
+        documents = loader.load()
         text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=30, separator="\n")
         docs = text_splitter.split_documents(documents=documents)
         chunks = [doc.page_content for doc in docs]
-        # # Generate embeddings
-        # embeddings = self.model.encode(chunks)
-        #loading the data and correspond embedding into the FAISS
+
+        # Create or update the FAISS index
         vectorstore = FAISS.from_documents(docs, self.embeddings)
-
-        # Add embeddings to FAISS index
-        start_index = self.index.ntotal
-        self.index.add(self.embeddings)
-        self.save_index(vectorstore)
-
-        # Update metadata
+        
+        # Store the current document in metadata
         file_name = os.path.basename(file_path)
-        self.metadata[file_name] = list(range(start_index, start_index + len(chunks)))
+        self.metadata[file_name] = len(chunks)  # Store number of chunks instead of indices
         self._save_metadata()
-
+        
+        # Save the updated index
+        vectorstore.save_local(self.index_path)
+        
         return len(chunks)
 
     def delete_embeddings(self, filename: str):

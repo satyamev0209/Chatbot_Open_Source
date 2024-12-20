@@ -3,7 +3,9 @@ uvicorn
 langchain
 langchain-community
 sentence-transformers
-faiss-gpu
+faiss-cpu
 langchain_ollama
 PyYAML
 pydantic
+scikit-learn
+python-multipart

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from utilities.fileOps import FileOps
 from utilities.vectorizationOps import VectorizationOps
 import utilities.llmOps 
+from typing import List
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -20,25 +21,28 @@ class Question(BaseModel):
 class Answer(BaseModel):
     answer: str
 
-# Initialize components
-file_ops = FileOps(base_dir=config['file_ops']['base_dir'])
-vector_ops = VectorizationOps(
-    index_path=config['vector_ops']['index_path'],
-    model_name=config['vector_ops']['model_name']
-)
+# Define the parameters for VectorizationOps
+index_path = config['vector_ops']['index_path']
+model_name = config['vector_ops']['model_name']
+
+# Initialize vectorization operations with required parameters
+vector_ops = VectorizationOps(index_path=index_path, model_name=model_name)
+
+# Initialize FileOps with both base_dir and vector_ops
+file_ops = FileOps(base_dir=config['file_ops']['base_dir'], vector_ops=vector_ops)
 
 @app.post("/upload")
-def upload_file(file: UploadFile):
+async def upload_file(file: UploadFile):
     try:
-        chunks = file_ops.save_file(file)
+        chunks = await file_ops.save_file(file)
         return {"message": "File uploaded and processed", "chunks": chunks}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 @app.delete("/delete/{filename}")
-def delete_file(filename: str):
+async def delete_file(filename: str):
     try:
-        if file_ops.delete_file(filename):
+        if await file_ops.delete_file(filename):
             return {"message": "File and related embeddings deleted"}
         return {"message": "File not found"}
     except Exception as e:
@@ -55,14 +59,20 @@ def ask_question(question: Question):
     try:
         context = vector_ops.search(question)
         answer = utilities.llmOps.generate_answer(context, question)
-
         return Answer(answer=answer)
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating answer: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error generating answer: {str(e)}"
+        )
 
-
-
-
-
-
+@app.post("/evaluate")
+def evaluate(questions: List[str], expected_answers: List[str]):
+    try:
+        evaluation_results = evaluate_model(questions, expected_answers)
+        return {"evaluation": evaluation_results}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error during evaluation: {str(e)}"
+        )
