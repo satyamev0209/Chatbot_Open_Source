@@ -1,23 +1,44 @@
-from utilities.prompts import LLMEvaluationTemplate
-from llmOps import generate_answer
+from utilities.prompts import evaluation_prompt
+from utilities.llmOps import generate_answer
+from utilities.vectorizationOps import VectorizationOps
 from langchain.llms import Ollama
 from sklearn.metrics import accuracy_score, f1_score
 from typing import List
+import yaml
 
-def evaluate_model(questions: List[str], expected_answers: List[str], vector_ops) -> dict:
-    llm = Ollama(model="llama3.1")  # Initialize the model
+# Load config
+with open("config.yaml", "r") as config_file:
+    config = yaml.safe_load(config_file)
+
+# Initialize VectorizationOps with config parameters
+vector_ops = VectorizationOps(
+    index_path=config['vector_ops']['index_path'],
+    model_name=config['vector_ops']['model_name']
+)
+
+def evaluate_model(questions: List[str], expected_answers: List[str]) -> dict:
+    if len(questions) != len(expected_answers):
+        raise ValueError("Number of questions and expected answers must match")
+        
+    llm = Ollama(model="llama3.1")
     generated_answers = []
 
     for question in questions:
-        context = vector_ops.search(question)  # Retrieve context for the question
-        answer = generate_answer(context, question)  # Generate answer
-        generated_answers.append(answer)
+        contexts = vector_ops.search(question)
+        context = " ".join(contexts)
+        answer = generate_answer(context, question)
+        generated_answers.append(answer.strip())  # Clean up whitespace
 
-    accuracy = accuracy_score(expected_answers, generated_answers)
-    f1 = f1_score(expected_answers, generated_answers, average='weighted')
+    # Convert answers to binary (correct/incorrect) for scoring
+    binary_expected = [1 if ans.strip() != "I Don't Know." else 0 for ans in expected_answers]
+    binary_generated = [1 if ans.strip() != "I Don't Know." else 0 for ans in generated_answers]
+
+    accuracy = accuracy_score(binary_expected, binary_generated)
+    f1 = f1_score(binary_expected, binary_generated, average='weighted')
 
     return {
-        "accuracy": accuracy,
-        "f1_score": f1,
-        "generated_answers": generated_answers
+        "accuracy": float(accuracy),  # Convert numpy types to Python native types
+        "f1_score": float(f1),
+        "generated_answers": generated_answers,
+        "num_questions": len(questions)
     }

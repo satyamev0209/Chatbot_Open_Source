@@ -33,12 +33,16 @@ This repository implements an end-to-end RAG pipeline with file uploads, FAISS v
    ```bash
    ollama pull <model-name>
    ```
+7. Run the Ollama server:
+   ```bash 
+   ollama run <model-name>
+   ``` 
 7. Update `config.yaml` with your settings.
 
 ## Usage
 1. Start the application:
    ```bash
-   python app.py
+   python app.py   # uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```
 2. Open your web browser and go to `http://localhost:5000` to access the application.
 

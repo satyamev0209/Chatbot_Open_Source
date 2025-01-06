@@ -4,9 +4,10 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from pydantic import BaseModel
 from utilities.fileOps import FileOps
 from utilities.vectorizationOps import VectorizationOps
+from utilities.eval import evaluate_model
 import utilities.llmOps 
 from typing import List
-
+from langchain_ollama.chat_models import ChatOllama
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -57,14 +58,17 @@ def read_root():
 @app.post("/ask", response_model=Answer)
 def ask_question(question: Question):
     try:
-        context = vector_ops.search(question)
-        answer = utilities.llmOps.generate_answer(context, question)
+        contexts = vector_ops.search(question.query)
+        context = " ".join(contexts)  # Join all contexts into a single string
+        print(f"At ask_question, Context: {context}")
+        answer = utilities.llmOps.generate_answer(context, question.query)
         return Answer(answer=answer)
     except Exception as e:
         raise HTTPException(
             status_code=500, 
             detail=f"Error generating answer: {str(e)}"
         )
+
 
 @app.post("/evaluate")
 def evaluate(questions: List[str], expected_answers: List[str]):
@@ -75,4 +79,17 @@ def evaluate(questions: List[str], expected_answers: List[str]):
         raise HTTPException(
             status_code=500,
             detail=f"Error during evaluation: {str(e)}"
+        )
+
+
+@app.get("/health")
+def check_health():
+    try:
+        llm = ChatOllama(model="llama3.2:1b")
+        response = llm.invoke("Hi, are you available?")
+        return {"status": "healthy", "llm_response": response}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error connecting to LLM: {str(e)}"
         )

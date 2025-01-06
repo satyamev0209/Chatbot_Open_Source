@@ -1,11 +1,10 @@
 import os
 import json
 from typing import List
-from langchain.document_loaders import PyPDFLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 class VectorizationOps:
     def __init__(self, index_path: str, model_name: str, metadata_path: str = "./metadata.json"):
@@ -28,18 +27,25 @@ class VectorizationOps:
         return embeddings
 
     def load_index(self):
-        if os.path.exists(self.index_path):
-            self.index = FAISS.load_local(
-                self.index_path, 
-                self.embeddings,
-                allow_dangerous_deserialization=True
-            )
-        else:
-            # Create an empty FAISS index
-            self.index = FAISS.from_texts(
-                texts=[""], 
-                embedding=self.embeddings
-            )
+        try:
+            if os.path.exists(self.index_path):
+                self.index = FAISS.load_local(
+                    self.index_path, 
+                    self.embeddings,
+                    allow_dangerous_deserialization=True
+                )
+            else:
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
+                # Create an empty FAISS index
+                self.index = FAISS.from_texts(
+                    texts=[""], 
+                    embedding=self.embeddings
+                )
+                # Save the empty index
+                self.index.save_local(self.index_path)
+        except Exception as e:
+            raise Exception(f"Error loading index: {str(e)}")
 
     def save_index(self, vectorstore):
         # faiss.write_index(self.index, self.index_path)
@@ -57,23 +63,36 @@ class VectorizationOps:
             json.dump(self.metadata, f)
 
     def process_file(self, file_path: str):
+        print(f"\nProcessing file: {file_path}")
+        
         # Load and split PDF into chunks
         loader = PyPDFLoader(file_path)
         documents = loader.load()
-        text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=30, separator="\n")
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=130)
         docs = text_splitter.split_documents(documents=documents)
         chunks = [doc.page_content for doc in docs]
-
+        
+        print(f"Number of chunks created: {len(chunks)}")
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
+        
         # Create or update the FAISS index
-        vectorstore = FAISS.from_documents(docs, self.embeddings)
+        if os.path.exists(self.index_path):
+            # Load existing index
+            existing_store = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=True)
+            # Add new documents to existing store
+            existing_store.add_documents(docs)
+            existing_store.save_local(self.index_path)
+        else:
+            # Create new vectorstore
+            vectorstore = FAISS.from_documents(docs, self.embeddings)
+            vectorstore.save_local(self.index_path)
         
-        # Store the current document in metadata
+        # Store metadata
         file_name = os.path.basename(file_path)
-        self.metadata[file_name] = len(chunks)  # Store number of chunks instead of indices
+        self.metadata[file_name] = len(chunks)
         self._save_metadata()
-        
-        # Save the updated index
-        vectorstore.save_local(self.index_path)
         
         return len(chunks)
 
@@ -81,31 +100,43 @@ class VectorizationOps:
         if filename not in self.metadata:
             return False
 
-        # Retrieve the indices associated with the file
-        indices_to_delete = self.metadata[filename]
-        indices_to_delete.sort()  # Ensure indices are sorted
-
-        # Mark embeddings as "deleted" in a new FAISS index
-        all_embeddings = self.index.reconstruct_n(0, self.index.ntotal)
-        remaining_embeddings = [
-            all_embeddings[i] for i in range(len(all_embeddings)) if i not in indices_to_delete
-        ]
-
-        # Rebuild the FAISS index
-        self.index = FAISS.IndexFlatL2(768)
-        self.index.add(remaining_embeddings)
-        self.save_index()
-
-        # Update metadata
-        del self.metadata[filename]
-        self._save_metadata()
-        return True
+        try:
+            # Load current vectorstore
+            current_store = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=True)
+            
+            # Get all documents
+            all_docs = current_store.similarity_search("", k=current_store.index.ntotal)
+            
+            # Filter out documents from the file to be deleted
+            remaining_docs = [doc for doc in all_docs if filename not in doc.metadata.get('source', '')]
+            
+            # Create new vectorstore with remaining documents
+            if remaining_docs:
+                new_store = FAISS.from_documents(remaining_docs, self.embeddings)
+                new_store.save_local(self.index_path)
+            else:
+                # If no documents remain, create empty index
+                empty_store = FAISS.from_texts([""], self.embeddings)
+                empty_store.save_local(self.index_path)
+            
+            # Update metadata
+            del self.metadata[filename]
+            self._save_metadata()
+            
+            return True
+        except Exception as e:
+            print(f"Error deleting embeddings: {str(e)}")
+            return False
 
     def search(self, query: str) -> List[str]:
-        # query_embedding = self.model.encode([query])
-        # distances, indices = self.index.search(query_embedding, top_k)
-        # return indices.flatten().tolist()
-        # Load from local storage
-        persisted_vectorstore = FAISS.load_local(self.index_path, self.embeddings,allow_dangerous_deserialization=True)
-        #creating a retriever on top of database
+        print(f"\nSearching for query: {query}")
+        persisted_vectorstore = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=True)
         retriever = persisted_vectorstore.as_retriever()
+        docs = retriever.get_relevant_documents(query)
+        print(f"Found {len(docs)} relevant documents")
+        
+        results = [doc.page_content for doc in docs]
+        for i, result in enumerate(results):
+            print(f"\nResult {i+1}: {result[:200]}...")  # Print first 200 chars of each result
+        
+        return results

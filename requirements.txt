@@ -6,6 +6,8 @@ sentence-transformers
 faiss-cpu
 langchain_ollama
 PyYAML
+pypdf
 pydantic
 scikit-learn
 python-multipart
+langchain_huggingface

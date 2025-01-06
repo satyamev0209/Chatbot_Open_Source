@@ -10,9 +10,10 @@ class FileOps:
         os.makedirs(self.base_dir, exist_ok=True)
 
     async def save_file(self, file: UploadFile):
-        file_path = os.path.join(self.base_dir, file.filename)
-        contents = await file.read()  # Properly await file read
+        file_path = os.path.join(self.base_dir, str(file.filename))
+        contents = await file.read()
         with open(file_path, "wb") as f:
+            f.write(contents)
             f.write(contents)
         chunks = self.vector_ops.process_file(file_path)
         return chunks
